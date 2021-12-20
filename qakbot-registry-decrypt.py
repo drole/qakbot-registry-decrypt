@@ -103,10 +103,13 @@ if __name__ == '__main__':
         print('Registry key is required.')
         sys.exit(0)
 
-    print('Using password (in UTF-16): "%s"'%password.decode('utf-16'))
+    print('Using password (in UTF-16): "{}"'.format(password.decode('utf-16')))
     password_hash = mit_crc32_shift4(password,0)            # calculate password's crc32_shift4 hash 
+    print('Password CRC32_shift4 Hash: {}\n'.format(hex(password_hash)))
+    
     precalc_regs = precalculate_reg_names(password_hash)    # precalculate registry names for lookup
     all_regs = get_all_reg_values(regkey)                   # collect all registry name/values from Qakbot's registry path
+
     if not all_regs.__len__():
         print('Registry path is empty')
         sys.exit(0)
@@ -117,4 +120,6 @@ if __name__ == '__main__':
         derived_key = sha1(key).digest()                      # hash salted key with SHA1 
         cipher = ARC4.new(derived_key)                        # use SHA1 hash as RC4 key
         msg = cipher.decrypt(value)                           # decrypt registry value data 
-        print("Registry key path: {}\n{}".format(options.registry_path+"\\"+name, hexdump.hexdump(msg, result="return")))
+        print("Registry key path: {}\nRC4 key: {}\nDecrypted value:\n{}\n".format(options.registry_path+"\\"+name, 
+        																	' '.join(format(x, '02x') for x in derived_key), 
+        																		hexdump.hexdump(msg, result="return")))
