@@ -4,17 +4,16 @@ This is a decryptor for Qakbot's configuration stored in the registry key
 
 ## Python 3 requirements
 
-'''
-arc4==0.0.4
+```arc4==0.0.4
 bitstring==3.1.9
 hexdump==3.3
 pycryptodome==3.12.0
 WMI==1.5.1
-'''
+```
 
 ## Usage
 
-'''
+```
 Usage: qakbot-registry-decrypt.py [options]
 
 Options:
@@ -24,4 +23,4 @@ Options:
                         (e.g. 'HKEY_CURRENT_USER\SOFTWARE\Microsoft\Efwramsn')
   -p PASSWORD, --password=PASSWORD
                         password (optional)
-'''
+```
