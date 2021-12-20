@@ -121,5 +121,5 @@ if __name__ == '__main__':
         cipher = ARC4.new(derived_key)                        # use SHA1 hash as RC4 key
         msg = cipher.decrypt(value)                           # decrypt registry value data 
         print("Registry key path: {}\nRC4 key: {}\nDecrypted value:\n{}\n".format(options.registry_path+"\\"+name, 
-        																	' '.join(format(x, '02x') for x in derived_key), 
-        																		hexdump.hexdump(msg, result="return")))
+                                                                        ' '.join(format(x, '02x') for x in derived_key), 
+                                                                        hexdump.hexdump(msg, result="return")))
