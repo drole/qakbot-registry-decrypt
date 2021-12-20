@@ -19,16 +19,13 @@ tbl4 =    [ 0x00000000, 0x1db71064, 0x3b6e20c8, 0x26d930ac,
 def mit_crc32_shift4(data, seed):
     crc = ~seed & 0xffffffff
     for byte in data:
-        x = tbl4[(byte ^ crc ) & 0x0f] ^ ((byte ^ crc)  >> 4)
-        crc = tbl4[x & 0x0f] ^  (x >> 4)
-    
+        x = tbl4[(byte ^ crc ) & 0x0f] ^ (((byte ^ crc) & 0xffffffff)  >> 4)
+        crc = tbl4[x & 0x0f] ^  ((x & 0xffffffff) >> 4)
     return ~crc & 0xffffffff
 
 def widen_string(string):
     s = string.encode('utf-16')
-    if s[:2] == b'\xff\xfe':
-        return s[2:]
-    return s
+    return s[2:] if s[:2] == b'\xff\xfe' else s
 
 def precalculate_reg_names(key):
     """precalculate registry names, returns a dictionary {'regname':'id'} """
@@ -36,7 +33,6 @@ def precalculate_reg_names(key):
     for i in range(0,0xff):
         reg_names[hex(mit_crc32_shift4(pack('I',i), key))[2:]] = i
     return reg_names
-
 
 def get_all_reg_values(reg_key):
     """gets all qakbot registry value"""
@@ -57,11 +53,14 @@ def get_password():
         computer_name = socket.gethostname();
     except:
         computer_name = os.environ['COMPUTERNAME']
-    for volume in wmi.WMI().Win32_LogicalDisk():
-        if volume.Caption == 'C:':
-            volume_serial_number = str(int(volume.VolumeSerialNumber,16))
-            break
-    user_account_name = os.getlogin()
+    try:
+        for volume in wmi.WMI().Win32_LogicalDisk():
+            if volume.Caption == 'C:':
+                volume_serial_number = str(int(volume.VolumeSerialNumber,16))
+                break
+        user_account_name = os.getlogin()
+    except:
+        return None
     return widen_string(computer_name.upper() + volume_serial_number.upper() + user_account_name.upper())
 
 
@@ -81,28 +80,41 @@ if __name__ == '__main__':
         password = options.password
     else:
         password = get_password()
+        if not password:
+            print('Error collecting password string')
+            sys.exit(0)
 
     if options.registry_path:
         root_match = re.match(r'^([Hh][a-zA-Z_]*?)\\(.*?)$',options.registry_path)
         if root_match:
             root = root_match.group(1)
-            if root.upper() == 'HKLM' or root.upper() == 'HKEY_LOCAL_MACHINE':
-                regkey = winreg.OpenKeyEx(winreg.HKEY_LOCAL_MACHINE, root_match.group(2))
-            if root.upper() == 'HKCU' or root.upper() == 'HKEY_CURRENT_USER':
-                regkey = winreg.OpenKeyEx(winreg.HKEY_CURRENT_USER, root_match.group(2))
+            try:
+                if root.upper() == 'HKLM' or root.upper() == 'HKEY_LOCAL_MACHINE':
+                    regkey = winreg.OpenKeyEx(winreg.HKEY_LOCAL_MACHINE, root_match.group(2))
+                if root.upper() == 'HKCU' or root.upper() == 'HKEY_CURRENT_USER':
+                    regkey = winreg.OpenKeyEx(winreg.HKEY_CURRENT_USER, root_match.group(2))
+            except WindowsError as e:
+                print('Failed to open registry key')
+                sys.exit(0)
+        else:
+            print('Registry key path format not allowed.')
+            sys.exit(0)
     else:
-        print('Registry key is required')
+        print('Registry key is required.')
         sys.exit(0)
 
-    print('Using password: "%s"'%password.decode('utf-16'))
-    password_hash = mit_crc32_shift4(password,0)
-    all_regs = get_all_reg_values(regkey)
-    precalc_regs = precalculate_reg_names(password_hash)
+    print('Using password (in UTF-16): "%s"'%password.decode('utf-16'))
+    password_hash = mit_crc32_shift4(password,0)            # calculate password's crc32_shift4 hash 
+    precalc_regs = precalculate_reg_names(password_hash)    # precalculate registry names for lookup
+    all_regs = get_all_reg_values(regkey)                   # collect all registry name/values from Qakbot's registry path
+    if not all_regs.__len__():
+        print('Registry path is empty')
+        sys.exit(0)
 
     for name,value in all_regs.items():
-        id_seed = precalc_regs[name]
-        key = pack('I',id_seed) + pack('I',password_hash)
-        derived_key = sha1(key).digest()
-        cipher = ARC4.new(derived_key)
-        msg = cipher.decrypt(value)
+        id_salt = precalc_regs[name]                          # lookup registry names from precalculated table (dictionary)
+        key = pack('I',id_salt) + pack('I',password_hash)     # prepend salt to password hash
+        derived_key = sha1(key).digest()                      # hash salted key with SHA1 
+        cipher = ARC4.new(derived_key)                        # use SHA1 hash as RC4 key
+        msg = cipher.decrypt(value)                           # decrypt registry value data 
         print("Registry key path: {}\n{}".format(options.registry_path+"\\"+name, hexdump.hexdump(msg, result="return")))
